@@ -1,0 +1,6 @@
+[submodule "jusText"]
+	path = jusText
+	url = https://github.com/endredy/jusText
+[submodule "CleanPortalEval"]
+	path = CleanPortalEval
+	url = https://github.com/ppke-nlpg/CleanPortalEval
