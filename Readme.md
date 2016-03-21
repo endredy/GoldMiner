@@ -2,6 +2,21 @@
 
 ## More Effective Boilerplate Removal - the GoldMiner Algorithm
 
+C++ version
+Short summary: it applies jusText to a webpage, but to only that part which contains the main content. This way comments, related stories etc won't be included. 
+GoldMiner learns the article positions of a webdomain.  
+
+JusText is written by Jan Pomikalek, in python. 
+https://code.google.com/p/justext/
+It has very good quality, so I have rewritten it in c++. :)
+
+
+
+GoldMiner repo contains 2 submodules (jusText + CleanPortalEval), so suggested git command is:
+```
+git clone --recursive https://github.com/endredy/GoldMiner
+```
+
 
 paper:
 http://www.gelbukh.com/polibits/2013_48/More%20Effective%20Boilerplate%20Removal%20-%20the%20GoldMiner%20Algorithm.pdf
