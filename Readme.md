@@ -13,7 +13,7 @@ JusText is written by Jan Pomikalek, in python.
 https://code.google.com/p/justext/  
 It has very good quality, so I have rewritten it in c++. :)  
 
-CleanPortalEval is an evaluate set for boilerplate removal algorithms. It is similar to prevoius ones (e.g. CleanEval), but it contains more pages from the same domain. (because GoldMiner has more sample to learn a web domain)  
+CleanPortalEval is an evaluate set for boilerplate removal algorithms. It is similar to previous ones (e.g. CleanEval), but it contains more pages from the same domain. (because GoldMiner needs more samples to learn a web domain)  
 
 ## Dependencies  
   
