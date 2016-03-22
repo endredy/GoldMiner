@@ -1,3 +1,15 @@
+/*******************************************************************************
+ * Copyright (c) 2013 IstvÃ¡n Endredy.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the GNU Lesser Public License v3
+ * which accompanies this distribution, and is available at
+ * http://www.gnu.org/licenses/
+ * 
+ * This is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser Public License for more details.
+ ******************************************************************************/
 #include "GoldMinerManager.h"
 #include "GoldMiner.h"
 #include "md5.h"
@@ -27,7 +39,7 @@ hibas karekterre panaszkodik, ez nem jo
 
 mnysz2013:
 +qtip buborekok hasznalata
-+linkek a plain verzióra az egyes alg. felett
++linkek a plain verziora az egyes alg. felett
 crawler:
 	-adjon unique nevet + eltero nevet(justext + gold) az egyes html-eknek
 +	-adjon hibauzenetet, ha nem tanulta meg a domaint
@@ -74,22 +86,6 @@ void GoldMinerManager::log(const std::string& msg, int level){
 
 	//printf("%s\n", msg.c_str());
 }
-
-/*std::string GoldMinerManager::getBestStartPattern(const std::string& domainID){
-
-	std::map<std::string, std::string>::const_iterator it = m_bestStartPattern.find( domainID );
-	if(it != m_bestStartPattern.end())
-		return it->second;
-	return "";
-}
-
-std::string GoldMinerManager::getBestEndPattern(const std::string& domainID){
-
-	std::map<std::string, std::string>::const_iterator it = m_bestEndPattern.find( domainID );
-	if(it != m_bestEndPattern.end())
-		return it->second;
-	return "";
-}*/
 
 bestPattern GoldMinerManager::getBestPattern(const std::string& domainID){
 
@@ -201,8 +197,7 @@ std::string GoldMinerManager::getContent(const std::string& html, std::string& e
 
 	}else{
 
-		//kiirunk memoriazabalas miatt par infot
-		debugInfo();
+		//debugInfo();
 
 		GoldMiner* b = getDomain(domainID);
 
@@ -214,10 +209,10 @@ std::string GoldMinerManager::getContent(const std::string& html, std::string& e
 		fsm.setConvertedHtml(html); //TODO: minek is kell ez?
 
 		//learn this webpage (extract and save best parent html patterns), it takes some time
-		b->learnPage(fsm, domainID, urlProp.getUrl());
+		b->learnPage(fsm);
 
 		if (!isLearning(domainID)){
-			//mar megvan, de o csak most latja
+			//it is already learnt (in another thread), but this thread notices only now
 			return m_justext.getContent(html, encoding, urlProp.getUrl());
 		}
 
@@ -230,8 +225,6 @@ std::string GoldMinerManager::getContent(const std::string& html, std::string& e
 			log(std::string("after learnFinal()"), 2);
 			//domain is learnt
 			//save best patterns
-			//m_bestStartPattern[ domainID ] = b->getStartPattern();
-			//m_bestEndPattern[ domainID ] = b->getEndPattern();
 			m_bestPatterns[ domainID ] = b->getPattern();
 
 			stopFinalizing(domainID);
@@ -240,11 +233,11 @@ std::string GoldMinerManager::getContent(const std::string& html, std::string& e
 			
 			std::string fname = m_resultPath + "/" + urlProp.getDomain(TOPDOMAIN) + "_goldminer.txt";
 			log(std::string("start flush"), 2);
-			//kiirjuk a tanulas soran osszegyult lapokat
+			//we write the pages collected during the learning process into files
 			b->setFlush(true);
 			flush(domainID, fname);
 			log(std::string("after flush"), 2);
-			return ""; //ezt mar kiirtuk a flush-sel, nem kell kivul foglalkozni vele, (itt mar learn = true)
+			return ""; //it is already written in flush, it is already done
 		}
 		return t;
 	}
@@ -281,29 +274,26 @@ bool GoldMinerManager::isFinalizing(const std::string& domainID){
 	return false;
 }
 
+/**
+it writes the pages collected during the learning process into files
+*/
 void GoldMinerManager::flush(const std::string& domainID, const std::string filename){
 	
 	log(std::string("flush: started()"), 2);
 	std::ofstream f;
 
 	//ML::Lock lock(m_flushMutex);
-	log(std::string("flush: 1"), 2);
 	GoldMiner* b = getDomain(domainID);
-	log(std::string("flush: 2"), 2);
 	if (!b->isFlush())
-		return; //tobb szal is flush-olni akarta (volna)
+		return; //more threads do not flush at the same time
 	b->setFlush(false);
-	log(std::string("flush: before reset()"), 2);
 	b->closeLearning();
-	log(std::string("flush: after reset()"), 2);
 
 	std::vector<pageInfo> pages = b->getPages();
 
 	log(stringprintf("flush: size of pages: %d", pages.size()), 2);
-	//std::set<std::string> md5Set;
 	std::string e;
 
-	bool spec = false;
 	bool cleanEvalTest = pages.size() > 0 && !pages[0].url.getFilename().empty();
 
 	log(stringprintf("cleanEvalTest: %d", (cleanEvalTest ? 1 : 0)), 2);
@@ -311,28 +301,15 @@ void GoldMinerManager::flush(const std::string& domainID, const std::string file
 	if (!cleanEvalTest && !filename.empty())
 		f.open(filename.c_str(), std::ios::app);
 
-	log(std::string("after fopen"), 2);
-
 	if (!pages.empty())
 		log(pages[0].url.getDomain(SUBDOMAIN) + std::string(" domain is learnt"), 1);
 
 	for(size_t i = 0; i < pages.size(); i++){
 
-		//uj feature: cikknek tunik az url?
-		/*if (!m_urlmanager.isArticle(pages[i].url, domainID)){
-			log(std::string("at flush, not article: ") + pages[i].url.getUrl(), 1);
-			continue;
-		}*/
 		e = detectCodePage(pages[i].page);
 		std::string text = getContent(pages[i].page, e, pages[i].url, true);
 
-		//update md5
-		//std::string md5 = calculate_md5(text);
-
-		//a tanulasi folyamat lapjaira is igaz: csak akkor irjuk oket fajlba, ha ujak :)
-		//2013.04.26: de ennek globalisnak kell lennie, mert az egyes aldomineken ismetlodhetnek a tartalmak (pl. mno.hu)
-		//if (md5Set.find(md5) == md5Set.end()){
-		if (cleanEvalTest){// || m_urlmanager.UniqueContent(md5)){
+		if (cleanEvalTest){
 
 			if (pages[i].url.getFilename().empty()){
 				f << std::endl << "URL: (flush) " << pages[i].url.getUrl() << std::endl;
@@ -398,6 +375,10 @@ std::string GoldMinerManager::getShorterHtml(const std::string& domainID, const 
 
 }
 
+/**
+there will be no more pages, we should finalize the learning processes: determine the best patterns and flush the contents
+in real application there is no need to call this function. It is used in tests. (where pages are limited)
+*/
 void GoldMinerManager::pendingPages(){
 
 	log(std::string("start pendingPages()"), 2);
@@ -411,49 +392,44 @@ void GoldMinerManager::pendingPages(){
 				
 				(*it->second).learnFinal();
 				log(std::string("pending, after learnFinal()"), 1);
-				//most tanulta meg ezt a domaint
+				//domain is learnt
 				//save into map, too
 				//if empty => use topdomain's
 				if ((*it->second).getPattern().size() == 0){
 
-					//hatha van teso
+					//sorry to say, we could not learn this domain. So, we try other possibilities.
+					//perhaps there is a "sister" domain (which is similar)
 					std::string start, end;
 					std::string sister = getSimilarSubdomain((*it->second).getDomainName().getDomain(SUBDOMAIN), start, end);
 					if (!sister.empty()){
-						//van teso
+						//we have a sister
 						log(stringprintf("not own patterns, use its sister (%s)", sister.c_str()), 1);
-						//m_bestStartPattern[ domainID ] = start; TODO!!!
-						//m_bestEndPattern[ domainID ] = end;
+						std::map<std::string, bestPattern>::const_iterator it = m_bestPatterns.find(sister);
+						if (it != m_bestPatterns.end()){
+						    m_bestPatterns[ domainID ] = it->second;
+						    log(std::string(" start: ") + it->second.getStartPattern(0), 1);
+						}
 					}else{
-						// ha nincs: akkor szulo
+						// if not => parent domain
 						log(stringprintf("not own patterns, use its parent (%s)", (*it->second).getDomainName().getDomain(m_learnUnit).c_str()), 1);
 					
 						std::string topdomainID = (*it->second).getDomainName().getDomain(TOPDOMAIN); //m_urlmanager.getDomainIdEx((*it->second).getDomainName(), TOPDOMAIN);
-						std::map<std::string, bestPattern>::const_iterator it;
-						it = m_bestPatterns.find(topdomainID);
+						std::map<std::string, bestPattern>::const_iterator it = m_bestPatterns.find(topdomainID);
 						if (it != m_bestPatterns.end()){
 							m_bestPatterns[ domainID ] = it->second;
 							log(std::string(" start: ") + it->second.getStartPattern(0), 1);
 						}
-						/*it = m_bestEndPattern.find(topdomainID);
-						if (it != m_bestEndPattern.end()){
-							m_bestEndPattern[ domainID ] = it->second;
-							log(std::string(" end: ") + it->second, 1);
-						}*/
 					}
 				}else{
 					m_bestPatterns[ domainID ] = (*it->second).getPattern();
-					//m_bestEndPattern[ domainID ] = (*it->second).getEndPattern();
 					//save best point into db
 					//saveBestPoint(domainID, m_bestStartPattern.find(domainID)->second, m_bestEndPattern.find(domainID)->second);
 				}
 
-				//b->closeLearning(); //akkor allitsuk be a flush-t, ha mar elmentettuk a mintakat!!!
 				std::string fname = m_resultPath + "/" + (*it->second).getDomainName().getDomain(TOPDOMAIN) + "_goldminer.txt";
-				//kiirjuk a tanulas soran osszegyult lapokat
+				//flush the pages collected during learning process
 				(*it->second).setFlush(true);
 				flush(domainID, fname);
-
 			}
 	}
 }

@@ -1,17 +1,26 @@
+/*******************************************************************************
+ * Copyright (c) 2013 István Endredy.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the GNU Lesser Public License v3
+ * which accompanies this distribution, and is available at
+ * http://www.gnu.org/licenses/
+ * 
+ * This is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser Public License for more details.
+ ******************************************************************************/
 #include "gtools.h"
 
 #ifdef WIN32
 #include <windows.h>
-//#include "dirent.h"
 #else
-//#include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
 #endif
 
 #include <fstream>
-//#include <algorithm>
 #include <stdarg.h>
 #include <pcrecpp.h>
 

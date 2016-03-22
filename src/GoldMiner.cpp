@@ -1,3 +1,15 @@
+/*******************************************************************************
+ * Copyright (c) 2013 István Endredy, Attila Novak.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the GNU Lesser Public License v3
+ * which accompanies this distribution, and is available at
+ * http://www.gnu.org/licenses/
+ * 
+ * This is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser Public License for more details.
+ ******************************************************************************/
 #include "GoldMiner.h"
 #include "GoldMinerManager.h"
 #include "gtools.h"
@@ -6,7 +18,6 @@
 
 void GoldMiner::clearPages(){
 	m_parentObject.log(std::string("clearPages() called"), 2); 
-	//ML::Lock lock(m_pagesMutex); 
 	m_pages.erase(m_pages.begin(), m_pages.end());
 }
 
@@ -15,7 +26,6 @@ save the page data for further process
 when domain will be learnt, then all pages will be processed again
 */
 void GoldMiner::addPage(UrlPath& url, const std::string& html){
-	//ML::Lock lock(m_pagesMutex);
 	pageInfo a;
 	a.page = html;
 	a.url = url;
@@ -39,16 +49,16 @@ void GoldMiner::debugInfo(){
 bool GoldMiner::hasEnoughPages(){
 
 	if (!m_learning) return false;
-	//ML::Lock lock(m_pagesMutex); //kell?
 	m_parentObject.log(stringprintf("learnt pages on domain(%s) %d / %d", m_domainID.c_str(), m_learntPages, m_pages.size()), 3);
 	if ((m_learntPages > m_pageLimit || 
-		(m_learntPages > 60 && m_pages.size() > m_learntPages * 10) /*|| m_learntPages == 20*/) 
+		(m_learntPages > 60 && m_pages.size() > m_learntPages * 10)) 
 		&& m_learning){
 			return true;
 	}
 	return false;
 }
 
+/** finalizing domain: the collected html patterns will be evaluated, and best starting and ending patterns will be selected */
 bool GoldMiner::learnFinal(){
 
 	m_learningFinal = true;
@@ -73,11 +83,11 @@ void GoldMiner::closeLearning(){
 	m_patterns.reset();
 }
 
-bool GoldMiner::paragraphExists(const std::string& domainID, const std::string& urlID, const std::string& text){
+/** it checks if the given paragraph is unique (in this web domain) */
+bool GoldMiner::paragraphExists(const std::string& text){
 
 	//memory version
 	std::string md5_sum = calculate_md5( removePunctuation(text) );
-	//ML::Lock lock(m_blackListMutex); //sajat mutex?
 	std::set<std::string>::const_iterator it = m_paragraphMd5.find(md5_sum);
 	if (it == m_paragraphMd5.end()){
 		m_paragraphMd5.insert( md5_sum );
@@ -86,19 +96,22 @@ bool GoldMiner::paragraphExists(const std::string& domainID, const std::string& 
 	return true;
 }
 
-void GoldMiner::learnPage(ParseFSM& fsm, const std::string& domainID, const std::string& urlID/*, const std::string& html, std::string& encoding*/){
+
+/**
+
+learning algorithm:
+
+ definition: bad paragraph = occurs more times on a domain, good paragraph = unique on a web domain
+ we search for bad paragraphs on this page in std::vector badPos
+ the good paragraphs are processed: we search their surrounding HTML tags 
+ 
+ the preceeding and subsequent HTML patterns of good paragraphs are stored into m_patterns
+
+ @fsm paragraph and DOM of page
+
+*/
+void GoldMiner::learnPage(ParseFSM& fsm/*, const std::string& domainID, const std::string& urlID*/){
 	
-	/*
-	az algoritmus: 
-	megkeressuk a rossz (=ismetlodo) bekezdeseket ezen a lapon belul (badPos vectorban)
-	a jo (tenyleg jo) elemeken vegigmegyunk, es megkeressuk a szulo tag-jeit ()
-	ezek kozul megkeressuk azokat, akik kozos szuloi a lapon szereplo jo bekezdeseknek
-	ezek kozul a legjobb pontszamuakat bevesszuk a bestparents-ek koze
-
-
-	a regi algoritmus is elo, itt van, ami a rosszakat keresi :)
-
-	*/
 	const std::vector<paragraph>& p = fsm.getParaConst();
 	std::string classname = fsm.getGood() ? "good" : "neargood";
 	std::vector<int> badPos, goodPos, bothPos;
@@ -106,11 +119,10 @@ void GoldMiner::learnPage(ParseFSM& fsm, const std::string& domainID, const std:
 	for(size_t i = 0; i<p.size(); i++){
 		if (p[i].finalclass.compare(classname) == 0){
 			bothPos.push_back(i);
-			if (!paragraphExists(domainID, urlID, p[i].text)){
+			if (!paragraphExists(p[i].text)){
 				goodPos.push_back(i);
-				//ez rossz: ha vegyes a jo rossz, akkor ez teved: if (badPos.size() == 0) lastGood = i;
 			}else if (!p[i].heading ||
-					(p[i].word_count > 1)){ //csak ha nem cim!!! vagy cim, de tobb szavas
+					(p[i].word_count > 1)){ //if it is not heading or heading and it contains more words
 				badPos.push_back(i);
 //				p[i].text.insert(0, "*** ");
 			}
@@ -122,18 +134,17 @@ void GoldMiner::learnPage(ParseFSM& fsm, const std::string& domainID, const std:
 		return;
 
 	if (goodPos.empty()) 
-		return; //nem tudunk mit tanulni: nincs jo szakasz :(
+		return; //no chance to learn, there is no good paragraph :(
 
-	//ezt az oldalt megtanuljuk, kerdes, hogy hany oldal alatt jon ossze a 100 tanulhato (soha?)
+	//we learn this page. It is a question, that how many pages will reach the min. (100) learnable page. (Never?)
 	m_learntPages++;
 
-	//hol kezdodik a cikk, es hol fejezodik be?
-	// ================
-	//alap megoldas: a jo pontok elejen, vegen
+	//where does the article start and end?
+	//basic solution: at the begin and end of goodPos
 	size_t articleStartPos = goodPos.front();
 	size_t articleEndPos = goodPos.back();
 
-	//komolyabb:
+	//advanced solution:
 	for(size_t ib=0; ib<badPos.size(); ib++){
 		for(size_t ig=0; ig<goodPos.size(); ig++){
 			if (badPos[ib] < goodPos[ig]){
@@ -151,7 +162,7 @@ void GoldMiner::learnPage(ParseFSM& fsm, const std::string& domainID, const std:
 	size_t offset1 = p[ articleStartPos ].m_htmlPosition1;
 	if (p[ articleStartPos ].m_originalTags.size())
 		offset1 += p[ articleStartPos ].m_originalTags.at(0).size();
-	size_t offset2 = p[ articleEndPos ].m_htmlPosition2; //1 volt!!!
+	size_t offset2 = p[ articleEndPos ].m_htmlPosition2; //there was 1!!!
 	
 	std::string articleHtml = fsm.getConvertedHtml().substr(offset1, offset2-offset1);
 
@@ -161,15 +172,16 @@ void GoldMiner::learnPage(ParseFSM& fsm, const std::string& domainID, const std:
 		offset1 += p[ articleStartPos ].m_originalTags.at(0).size();
 
 	findPatterns(fsm.getConvertedHtml(), offset1, 0, patternContainer::goodStartPattern, openPatterns); // ez kell, ezen az agon minden nyito erdekel
-	//findPatterns(fsm.getConvertedHtml(), 0, offset1, insideStartPattern, openPatterns); // ez kell, ezen az agon minden nyito erdekel
 
 	if (p.size() > articleEndPos){
 		findPatterns(fsm.getConvertedHtml(), offset1, p[ articleEndPos ].m_htmlPosition2, patternContainer::goodEndPattern, openPatterns);
 	}
 
-	//ganajturo trukk: ha van rossz bekezdes a jo reszen belul (azaz a jo nem egybefuggo), akkor keresunk egy rossz pattern-t ahhoz, hogy irtani tudjuk a rosszt
+	//trick of "dung beetle" (opposite of the gold miner: one searches for gold, other for trash)
+	//if there are bad paragraphs inside the article (in other words good paragraphs are not continuous), then we search for bad patterns, to be able to remove them
+	//this is a future feature
 	if (badPos.size() > 0){
-		// ha van rossz, es benne van a jo reszben => egy kis ganajturas, az aranyasas kozben :)
+		// if there is bad parag. and it stands inside of article (in good ones) => a little "dung beetle" process at gold mining :)
 		if (goodPos.front() < badPos.front() &&
 			goodPos.back() > badPos.front()){
 				openPatterns.clear();
@@ -183,9 +195,9 @@ void GoldMiner::learnPage(ParseFSM& fsm, const std::string& domainID, const std:
 	}
 }
 
-
-
-//megkeresi a str-ben a re mintat, ha csak ott van, mint az origPos, akkor false
+/** it searches the regex pattern in str, 
+ @ return true, if it occures only at origPos; 
+          false otherwise (if pattern occures at other positions as well */
 bool search(std::string& pattern, pcrecpp::StringPiece& str, int origPos){
 
 	std::string pat;
@@ -199,14 +211,20 @@ bool search(std::string& pattern, pcrecpp::StringPiece& str, int origPos){
 	bool b = re.DoMatch(str, pcrecpp::RE::UNANCHORED, &pos, args, 1);//NULL, 0);
 	int matchPos = pos - pat.length();
 	if (b && origPos == matchPos) 
-		return false; //csak ott szerepel a str-ben, mint az origPos => nem szamit talalatnak
-	return b; //elofordul a str-ben mashol is
+		return false; //it occures only at origPos in str => it is not hit
+	return b; //it occures at other positions
 }
 
 /**
 
-html: ebben a stringben a begin pozicio elott (vagy front==false eseten end pozicio utan) keres jellemzi html mintakat
- ezeket leellenorzi a html megelozo reszein (hogy unique legyen)
+it searches for html patterns
+before the article (before begin)
+
+@html html source, where we want to search in
+@begin begin offset of atricle in html
+@end end position of article
+@type what we are searching for (preceeding or subsequent HTML patterns)
+@onlyOnce it contains the tags of the previous call, we want to store that open and close patterns together (it can happen that the most frequent open and close patterns are not present on the same page. We need them in pairs.)
 */
 void GoldMiner::findPatterns(const std::string& html, 
 									   size_t begin, 
@@ -227,7 +245,6 @@ void GoldMiner::findPatterns(const std::string& html,
 
 	pcrecpp::StringPiece htmlPattern = htmlPatternStr;
 	pcrecpp::StringPiece checkHtml(checkHtmlStr);
-	//ML::Lock lock(m_multiPatternsMutex);  // teszt hivas
 
 	std::set<std::string> openPatterns;
 	if (endTagSearch){
@@ -364,7 +381,7 @@ bool GoldMiner::isArticle(const ParseFSM& fsm, const std::vector<int>& goodPos){
 	}
 
 	return true;
-	if (max_length >= m_articleMinLimit) //angol eseten kisebbekek a bekezdesek (es introk meg kisebbek)
+	if (max_length >= m_articleMinLimit) //paragraphs are shorter in English
 		return true;
 	return false;
 }

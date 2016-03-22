@@ -1,6 +1,6 @@
 rm goldMinerTest
 make
-mkdir demo
+mkdir -p demo
 ./goldMinerTest
 
-python CleanPortalEval/cleaneval.py -st demo CleanPortalEval/goldstandard
+python CleanPortalEval/cleaneval.py -st demo CleanPortalEval/GoldStandard
