@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2013 IstvÃ¡n Endredy.
+ * Copyright (c) 2013 Istvan Endredy.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the GNU Lesser Public License v3
  * which accompanies this distribution, and is available at
@@ -16,40 +16,6 @@
 #include "gtools.h"
 
 
-	/**
-	1. strategia: minden szovegdarab md5-jet megjegyezzuk: ha mar volt: eldobjuk NEM JO, a fo cikket kinyirja ha mar a reklamnal megtanulta (utalni)
-	2. strategia: bizonyos letoltott oldalszam utan atnezzuk: melyik jonak minositett rossz darab korul milyen unique tagek vannak a html-ben:
-				ezeket ettol fogva eleve irtjuk
-
-				legutolso jo utan es a elso al jo (rossz) kozotti tageket keressuk (akik NEM szerepelnek elotte)
-				pozicio is kell: jo utani relativ tav
-
-				mi van akkor, ha az irtando resz a fo resz elott van?
-
-
-kod tisztitas
-tobbszalu teszt
-karakterhiba
-egy-egy url-re meghivhato legyen konnyen
-memoriaban kezelje a duplikatumokat, es csak a vagomintakat tegye db-be
-
-most ketszer parsolunk: egyszer (karakter) hibajavtas celjabol, egyszer valoban: jo lenne csak egyszer
-hibas karekterre panaszkodik, ez nem jo
-
-
-mnysz2013:
-+qtip buborekok hasznalata
-+linkek a plain verziora az egyes alg. felett
-crawler:
-	-adjon unique nevet + eltero nevet(justext + gold) az egyes html-eknek
-+	-adjon hibauzenetet, ha nem tanulta meg a domaint
-jelezze a felület, mely domaineket tanulta meg
-qtip buborek esetleg a full html-ben is
-base tag + buborek include egyszerre
-teszteles: tobb domainen
-pi gepre felteheto? vagy laptop
-
-				*/
 
 GoldMinerManager::GoldMinerManager(
 				Justext& justext,
@@ -84,7 +50,7 @@ GoldMinerManager::GoldMinerManager(
 
 void GoldMinerManager::log(const std::string& msg, int level){
 
-	//printf("%s\n", msg.c_str());
+	//std::cout << msg << std::endl;
 }
 
 bestPattern GoldMinerManager::getBestPattern(const std::string& domainID){
@@ -138,7 +104,6 @@ void makeDebugOutputEx(const std::string& htmlOrig, size_t htmlOffset, ParseFSM&
 	size_t offset = 0;
 	std::string style = " style='background-color:yellow'";
 
-//	std::string aaa = html.substr(0, htmlOffset);
 	for(size_t i = 0; i < fsm.getPara().size(); i++){
 		if (fsm.getPara()[i].finalclass.compare("good") == 0){
 			size_t tagEnd = html.find('>', offset + htmlOffset + fsm.getPara()[i].m_htmlPosition1-(htmlOffset == 0 ? 0 : 1)); //!!!
@@ -258,17 +223,14 @@ void GoldMinerManager::debugInfo(){
 }
 
 void GoldMinerManager::startFinalizing(const std::string& domainID){
-	//ML::Lock lock(m_finalizingMutex);
 	m_finalizingDomains.insert(domainID);
 }
 
 void GoldMinerManager::stopFinalizing(const std::string& domainID){
-	//ML::Lock lock(m_finalizingMutex);
 	m_finalizingDomains.erase(domainID);
 }
 
 bool GoldMinerManager::isFinalizing(const std::string& domainID){
-	//ML::Lock lock(m_finalizingMutex);
 	if (m_finalizingDomains.find(domainID) != m_finalizingDomains.end())
 		return true;
 	return false;
@@ -282,7 +244,6 @@ void GoldMinerManager::flush(const std::string& domainID, const std::string file
 	log(std::string("flush: started()"), 2);
 	std::ofstream f;
 
-	//ML::Lock lock(m_flushMutex);
 	GoldMiner* b = getDomain(domainID);
 	if (!b->isFlush())
 		return; //more threads do not flush at the same time
@@ -330,7 +291,6 @@ void GoldMinerManager::flush(const std::string& domainID, const std::string file
 }
 
 GoldMiner* GoldMinerManager::getDomain(const std::string& domain){
-//	ML::Lock lock(m_learnMutex);
 	std::map<std::string, GoldMiner* >::iterator it = m_learningInfo.find(domain);
 	if (it == m_learningInfo.end()){
 		m_learningInfo[domain] = new GoldMiner(*this, domain);
@@ -349,7 +309,7 @@ std::string GoldMinerManager::getGold(const std::string& html, std::string& enco
 		if(pcrecpp::RE(endPattern, PCRE_MULTILINE).DoMatch(article, pcrecpp::RE::UNANCHORED, &pos, NULL, 0))
 			return article.substr(0, pos);
 
-		//nem volt vege
+		//html has no end pattern
 		error = true;
 		return article;
 	}
